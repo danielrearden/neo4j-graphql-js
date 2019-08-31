@@ -7,21 +7,27 @@ import { InMemoryCache } from 'apollo-cache-inmemory';
 import gql from 'graphql-tag';
 import fetch from 'node-fetch';
 
+import { resetDatabase } from '../helpers/integrationTestHelpers';
+
 let client;
 
-test.before(() => {
+test.beforeEach(() => {
   client = new ApolloClient({
     link: new HttpLink({ uri: 'http://localhost:3000', fetch: fetch }),
     cache: new InMemoryCache()
   });
 });
 
-test('hello world', t => {
+test.beforeEach(async () => {
+  await resetDatabase();
+});
+
+test.serial('hello world', t => {
   t.plan(1);
   t.is('true', 'true');
 });
 
-test('basic GraphQL query', async t => {
+test.serial('basic GraphQL query', async t => {
   t.plan(1);
 
   let expected = {
@@ -53,7 +59,7 @@ test('basic GraphQL query', async t => {
     });
 });
 
-test('GraphQL query with @cypher directive', async t => {
+test.serial('GraphQL query with @cypher directive', async t => {
   t.plan(1);
 
   let expected = {
@@ -65,33 +71,33 @@ test('GraphQL query with @cypher directive', async t => {
           actors: [
             {
               __typename: 'Actor',
-              name: 'Craig Sheffer'
-            },
-            {
-              __typename: 'Actor',
-              name: 'Tom Skerritt'
-            },
-            {
-              __typename: 'Actor',
               name: 'Brad Pitt'
             },
             {
               __typename: 'Actor',
               name: 'Brenda Blethyn'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Craig Sheffer'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Tom Skerritt'
             }
           ],
           similar: [
             {
               __typename: 'Movie',
-              title: 'Dracula Untold'
+              title: "'Round Midnight"
             },
             {
               __typename: 'Movie',
-              title: 'Captive, The'
+              title: "'Salem's Lot"
             },
             {
               __typename: 'Movie',
-              title: 'Helter Skelter'
+              title: "'Til There Was You"
             }
           ]
         }
@@ -105,7 +111,7 @@ test('GraphQL query with @cypher directive', async t => {
         {
           Movie(title: "River Runs Through It, A") {
             title
-            actors {
+            actors(orderBy: [name_asc]) {
               name
             }
             similar(first: 3) {
@@ -123,7 +129,7 @@ test('GraphQL query with @cypher directive', async t => {
     });
 });
 
-test('Handle @cypher directive on QueryType', async t => {
+test.serial('Handle @cypher directive on QueryType', async t => {
   t.plan(1);
 
   let expected = {
@@ -135,15 +141,15 @@ test('Handle @cypher directive on QueryType', async t => {
           movies: [
             {
               __typename: 'Movie',
-              title: 'Boxtrolls, The'
+              title: 'Zootopia'
             },
             {
               __typename: 'Movie',
-              title: 'Challenge to Lassie'
+              title: 'Zenon: Z3'
             },
             {
               __typename: 'Movie',
-              title: 'Maleficent'
+              title: 'Zenon: The Zequel'
             }
           ]
         }
@@ -157,7 +163,7 @@ test('Handle @cypher directive on QueryType', async t => {
         {
           GenresBySubstring(substring: "Children") {
             name
-            movies(first: 3) {
+            movies(first: 3, orderBy: [title_desc]) {
               title
             }
           }
@@ -172,7 +178,7 @@ test('Handle @cypher directive on QueryType', async t => {
     });
 });
 
-test('Mutation with @cypher directive (not-isolated)', async t => {
+test.serial('Mutation with @cypher directive (not-isolated)', async t => {
   t.plan(1);
 
   let expected = {
@@ -202,7 +208,7 @@ test('Mutation with @cypher directive (not-isolated)', async t => {
     });
 });
 
-test('Create node mutation (not-isolated)', async t => {
+test.serial('Create node mutation (not-isolated)', async t => {
   t.plan(1);
 
   let expected = {
@@ -247,7 +253,7 @@ test('Create node mutation (not-isolated)', async t => {
     });
 });
 
-test('Update node mutation', async t => {
+test.serial('Update node mutation', async t => {
   t.plan(1);
 
   let expected = {
@@ -354,6 +360,39 @@ test.serial('Remove relationship mutation (not-isolated)', async t => {
   await client
     .mutate({
       mutation: gql`
+        mutation addGenreRelationToMovie(
+          $from: _MovieInput!
+          $to: _GenreInput!
+        ) {
+          AddMovieGenres(from: $from, to: $to) {
+            from {
+              title
+              genres {
+                name
+              }
+            }
+            to {
+              name
+            }
+          }
+        }
+      `,
+      variables: {
+        from: {
+          movieId: '123'
+        },
+        to: {
+          name: 'Action'
+        }
+      }
+    })
+    .catch(error => {
+      t.fail(error);
+    });
+
+  await client
+    .mutate({
+      mutation: gql`
         mutation removeGenreRelationshipToMovie(
           $from: _MovieInput!
           $to: _GenreInput!
@@ -388,7 +427,7 @@ test.serial('Remove relationship mutation (not-isolated)', async t => {
     });
 });
 
-test('Delete node mutation', async t => {
+test.serial('Delete node mutation', async t => {
   t.plan(1);
 
   await client
@@ -427,7 +466,7 @@ test('Delete node mutation', async t => {
 });
 // TODO: mutation with variables
 
-test('Top level orderBy', async t => {
+test.serial('Top level orderBy', async t => {
   t.plan(1);
 
   let expected = {
@@ -443,11 +482,11 @@ test('Top level orderBy', async t => {
             },
             {
               __typename: 'Actor',
-              name: 'Max Minghella'
+              name: 'Jenna Dewan Tatum'
             },
             {
               __typename: 'Actor',
-              name: 'Jenna Dewan Tatum'
+              name: 'Justin Long'
             }
           ]
         },
@@ -456,15 +495,15 @@ test('Top level orderBy', async t => {
           __typename: 'Movie',
           actors: [
             {
-              name: 'Jesse Eisenberg',
-              __typename: 'Actor'
-            },
-            {
-              name: 'Nick Swardson',
-              __typename: 'Actor'
-            },
-            {
               name: 'Aziz Ansari',
+              __typename: 'Actor'
+            },
+            {
+              name: 'Danny McBride',
+              __typename: 'Actor'
+            },
+            {
+              name: 'Jesse Eisenberg',
               __typename: 'Actor'
             }
           ]
@@ -474,7 +513,7 @@ test('Top level orderBy', async t => {
           __typename: 'Movie',
           actors: [
             {
-              name: 'Joseph Gordon-Levitt',
+              name: 'Anna Kendrick',
               __typename: 'Actor'
             },
             {
@@ -482,7 +521,7 @@ test('Top level orderBy', async t => {
               __typename: 'Actor'
             },
             {
-              name: 'Seth Rogen',
+              name: 'Joseph Gordon-Levitt',
               __typename: 'Actor'
             }
           ]
@@ -497,7 +536,7 @@ test('Top level orderBy', async t => {
         {
           Movie(year: 2011, orderBy: title_asc, first: 3) {
             title
-            actors(first: 3) {
+            actors(first: 3, orderBy: [name_asc]) {
               name
             }
           }
@@ -512,7 +551,7 @@ test('Top level orderBy', async t => {
     });
 });
 
-test('query relationship property data', async t => {
+test.serial('query relationship property data', async t => {
   t.plan(1);
 
   let expected = {
@@ -568,7 +607,7 @@ test('query relationship property data', async t => {
     });
 });
 
-test('query using inine fragment', async t => {
+test.serial('query using inine fragment', async t => {
   t.plan(1);
 
   let expected = {
@@ -587,7 +626,7 @@ test('query using inine fragment', async t => {
         {
           Movie(title: "River Runs Through It, A") {
             title
-            ratings {
+            ratings(filter: { timestamp: 995233489 }) {
               rating
               User {
                 ... on User {
@@ -808,6 +847,50 @@ test.serial(
 test.serial(
   'Temporal - Query node with temporal field (not-isolated)',
   async t => {
+    t.plan(1);
+
+    await client
+      .mutate({
+        mutation: gql`
+          mutation createWithTemporalFields(
+            $title: String
+            $localDateTimeInput: _Neo4jLocalDateTimeInput
+            $dateInput: _Neo4jDateInput
+          ) {
+            CreateMovie(
+              title: $title
+              imdbRating: 2.0
+              year: 2010
+              localDateTime: $localDateTimeInput
+              dateTime: { year: 2010, month: 1, day: 2 }
+              date: $dateInput
+            ) {
+              title
+              dateTime {
+                year
+                month
+                day
+                formatted
+              }
+              localDateTime {
+                formatted
+              }
+              date {
+                formatted
+              }
+            }
+          }
+        `,
+        variables: {
+          title: 'Bob Loblaw 3',
+          localDateTimeInput: { formatted: '2010-01-02T00:00:00' },
+          dateInput: { formatted: '2010-01-02' }
+        }
+      })
+      .catch(error => {
+        t.fail(error);
+      });
+
     let expected = {
       data: {
         Movie: [
@@ -930,6 +1013,22 @@ test.serial(
   async t => {
     t.plan(1);
 
+    await client
+      .mutate({
+        mutation: gql`
+          mutation {
+            CreateOnlyDate(date: { day: 10, month: 11, year: 2020 }) {
+              date {
+                formatted
+              }
+            }
+          }
+        `
+      })
+      .catch(error => {
+        t.fail(error);
+      });
+
     let expected = {
       data: {
         OnlyDate: [
@@ -969,6 +1068,22 @@ test.serial(
   'Temporal - temporal query argument, formatted (not-isolated)',
   async t => {
     t.plan(1);
+
+    await client
+      .mutate({
+        mutation: gql`
+          mutation {
+            CreateOnlyDate(date: { day: 10, month: 11, year: 2020 }) {
+              date {
+                formatted
+              }
+            }
+          }
+        `
+      })
+      .catch(error => {
+        t.fail(error);
+      });
 
     let expected = {
       data: {
@@ -1054,6 +1169,27 @@ test.serial(
   async t => {
     t.plan(1);
 
+    await client
+      .mutate({
+        mutation: gql`
+          mutation {
+            AddMovieRatings(
+              from: { userId: 18 }
+              to: { movieId: 6683 }
+              data: { rating: 5, date: { year: 2018, month: 12, day: 18 } }
+            ) {
+              date {
+                formatted
+              }
+              rating
+            }
+          }
+        `
+      })
+      .catch(error => {
+        t.fail(error);
+      });
+
     let expected = {
       data: {
         Movie: [
@@ -1100,7 +1236,7 @@ test.serial(
   }
 );
 
-test('Basic filter', async t => {
+test.serial('Basic filter', async t => {
   t.plan(1);
 
   let expected = {
@@ -1156,10 +1292,10 @@ test('Basic filter', async t => {
     });
 });
 
-test.before(
-  'Prepare Apollo generated filters test with underscores',
+test.serial(
+  'Basic filter using Apollo generated filters underscore test',
   async t => {
-    t.plan(1);
+    t.plan(2);
 
     let expected = {
       data: {
@@ -1189,46 +1325,42 @@ test.before(
       .catch(error => {
         t.fail(error);
       });
+
+    expected = {
+      data: {
+        Movie: [
+          {
+            __typename: 'Movie',
+            title: 'Legends of the Fall'
+          }
+        ]
+      }
+    };
+
+    await client
+      .query({
+        query: gql`
+          {
+            Movie(
+              filter: {
+                someprefix_title_with_underscores_starts_with: "Legends of the"
+              }
+            ) {
+              title
+            }
+          }
+        `
+      })
+      .then(data => {
+        t.deepEqual(data.data, expected.data);
+      })
+      .catch(error => {
+        t.fail(error);
+      });
   }
 );
 
-test('Basic filter using Apollo generated filters underscore test', async t => {
-  t.plan(1);
-
-  let expected = {
-    data: {
-      Movie: [
-        {
-          __typename: 'Movie',
-          title: 'Legends of the Fall'
-        }
-      ]
-    }
-  };
-
-  await client
-    .query({
-      query: gql`
-        {
-          Movie(
-            filter: {
-              someprefix_title_with_underscores_starts_with: "Legends of the"
-            }
-          ) {
-            title
-          }
-        }
-      `
-    })
-    .then(data => {
-      t.deepEqual(data.data, expected.data);
-    })
-    .catch(error => {
-      t.fail(error);
-    });
-});
-
-test('Filter with AND', async t => {
+test.serial('Filter with AND', async t => {
   t.plan(1);
 
   let expected = {
@@ -1267,7 +1399,7 @@ test('Filter with AND', async t => {
     });
 });
 
-test('Filter with OR', async t => {
+test.serial('Filter with OR', async t => {
   t.plan(1);
 
   let expected = {
@@ -1332,7 +1464,7 @@ test('Filter with OR', async t => {
     });
 });
 
-test('Filter with nested AND and OR', async t => {
+test.serial('Filter with nested AND and OR', async t => {
   t.plan(1);
 
   let expected = {
@@ -1404,15 +1536,15 @@ test('Filter with nested AND and OR', async t => {
           genres: [
             {
               __typename: 'Genre',
+              name: 'War'
+            },
+            {
+              __typename: 'Genre',
               name: 'Drama'
             },
             {
               __typename: 'Genre',
               name: 'Adventure'
-            },
-            {
-              __typename: 'Genre',
-              name: 'War'
             }
           ]
         },
@@ -1422,11 +1554,7 @@ test('Filter with nested AND and OR', async t => {
           genres: [
             {
               __typename: 'Genre',
-              name: 'Drama'
-            },
-            {
-              __typename: 'Genre',
-              name: 'Crime'
+              name: 'Thriller'
             },
             {
               __typename: 'Genre',
@@ -1434,7 +1562,11 @@ test('Filter with nested AND and OR', async t => {
             },
             {
               __typename: 'Genre',
-              name: 'Thriller'
+              name: 'Drama'
+            },
+            {
+              __typename: 'Genre',
+              name: 'Crime'
             }
           ]
         },
@@ -1502,11 +1634,11 @@ test('Filter with nested AND and OR', async t => {
           genres: [
             {
               __typename: 'Genre',
-              name: 'Drama'
+              name: 'Mystery'
             },
             {
               __typename: 'Genre',
-              name: 'Mystery'
+              name: 'Drama'
             },
             {
               __typename: 'Genre',
@@ -1572,11 +1704,7 @@ test('Filter with nested AND and OR', async t => {
           genres: [
             {
               __typename: 'Genre',
-              name: 'Action'
-            },
-            {
-              __typename: 'Genre',
-              name: 'Adventure'
+              name: 'Sci-Fi'
             },
             {
               __typename: 'Genre',
@@ -1584,7 +1712,11 @@ test('Filter with nested AND and OR', async t => {
             },
             {
               __typename: 'Genre',
-              name: 'Sci-Fi'
+              name: 'Adventure'
+            },
+            {
+              __typename: 'Genre',
+              name: 'Action'
             }
           ]
         },
@@ -1625,7 +1757,7 @@ test('Filter with nested AND and OR', async t => {
             orderBy: [title_asc]
           ) {
             title
-            genres {
+            genres(orderBy: [name_desc]) {
               name
             }
           }
@@ -1640,7 +1772,7 @@ test('Filter with nested AND and OR', async t => {
     });
 });
 
-test('Filter in selection', async t => {
+test.serial('Filter in selection', async t => {
   t.plan(1);
 
   let expected = {
@@ -1839,7 +1971,7 @@ test('Filter in selection', async t => {
     });
 });
 
-test('Nested filter', async t => {
+test.serial('Nested filter', async t => {
   t.plan(1);
 
   let expected = {
@@ -1851,19 +1983,19 @@ test('Nested filter', async t => {
           actors: [
             {
               __typename: 'Actor',
-              name: 'Craig Sheffer'
-            },
-            {
-              __typename: 'Actor',
-              name: 'Tom Skerritt'
-            },
-            {
-              __typename: 'Actor',
               name: 'Brad Pitt'
             },
             {
               __typename: 'Actor',
               name: 'Brenda Blethyn'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Craig Sheffer'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Tom Skerritt'
             }
           ]
         }
@@ -1883,7 +2015,7 @@ test('Nested filter', async t => {
             orderBy: [title_asc]
           ) {
             title
-            actors {
+            actors(orderBy: [name_asc]) {
               name
             }
           }
@@ -1898,7 +2030,7 @@ test('Nested filter', async t => {
     });
 });
 
-test('Filter with GraphQL variable', async t => {
+test.serial('Filter with GraphQL variable', async t => {
   t.plan(1);
 
   let expected = {
@@ -1910,19 +2042,19 @@ test('Filter with GraphQL variable', async t => {
           actors: [
             {
               __typename: 'Actor',
-              name: 'Craig Sheffer'
-            },
-            {
-              __typename: 'Actor',
-              name: 'Tom Skerritt'
-            },
-            {
-              __typename: 'Actor',
               name: 'Brad Pitt'
             },
             {
               __typename: 'Actor',
               name: 'Brenda Blethyn'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Craig Sheffer'
+            },
+            {
+              __typename: 'Actor',
+              name: 'Tom Skerritt'
             }
           ]
         }
@@ -1942,7 +2074,7 @@ test('Filter with GraphQL variable', async t => {
             orderBy: [title_asc]
           ) {
             title
-            actors {
+            actors(orderBy: [name_asc]) {
               name
             }
           }
