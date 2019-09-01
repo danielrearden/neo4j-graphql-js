@@ -5,7 +5,8 @@ import {
   extractTypeMapFromTypeDefs,
   addDirectiveDeclarations,
   printTypeMap,
-  getPayloadSelections
+  getPayloadSelections,
+  getConcreteTypeNames
 } from './utils';
 import {
   extractTypeMapFromSchema,
@@ -36,6 +37,8 @@ export async function neo4jgraphql(
 
   const cypherFunction = isMutation(resolveInfo) ? cypherMutation : cypherQuery;
   [query, cypherParams] = cypherFunction(params, context, resolveInfo);
+
+  cypherParams.concreteTypeNames = getConcreteTypeNames(resolveInfo.schema);
 
   if (debug) {
     console.log(query);

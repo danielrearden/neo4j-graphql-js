@@ -8,7 +8,6 @@ import {
   getFilterParams,
   innerType,
   isGraphqlScalarType,
-  extractSelections,
   relationDirective,
   getRelationTypeDirective,
   decideNestedVariableName,
@@ -17,7 +16,8 @@ import {
   isTemporalField,
   getTemporalArguments,
   temporalPredicateClauses,
-  removeIgnoredFields
+  removeIgnoredFields,
+  getTypenameMapElement
 } from './utils';
 import {
   customCypherField,
@@ -77,13 +77,42 @@ export function buildCypherSelection({
     return [subSelection, { ...shallowFilterParams, ...subFilterParams }];
   };
 
-  if (selections.find(({ kind }) => kind && kind === 'InlineFragment')) {
-    return selections
-      .filter(({ kind }) => kind && kind === 'InlineFragment')
+  if (
+    selections.find(
+      ({ kind }) => kind === 'InlineFragment' || kind === 'FragmentSpread'
+    )
+  ) {
+    const nonFragmentSelections = selections.filter(
+      ({ kind }) => kind !== 'InlineFragment' && kind !== 'FragmentSpread'
+    );
+
+    let nonFragmentCypherSelection = initial;
+    if (nonFragmentSelections.length) {
+      nonFragmentCypherSelection = buildCypherSelection({
+        initial,
+        cypherParams,
+        selections: nonFragmentSelections,
+        variableName,
+        schemaType,
+        resolveInfo,
+        paramIndex,
+        parentSelectionInfo,
+        secondParentSelectionInfo
+      });
+      nonFragmentCypherSelection[0] = `${nonFragmentCypherSelection[0]},`;
+    }
+    const selection = selections
+      .filter(
+        ({ kind }) => kind === 'InlineFragment' || kind === 'FragmentSpread'
+      )
       .reduce((query, selection, index) => {
-        const fragmentSelections = selection.selectionSet.selections;
+        const fragment =
+          selection.kind === 'FragmentSpread'
+            ? resolveInfo.fragments[selection.name.value]
+            : selection;
+        const fragmentSelections = fragment.selectionSet.selections;
         const fragmentSchemaType = resolveInfo.schema.getType(
-          selection.typeCondition.name.value
+          fragment.typeCondition.name.value
         );
         let fragmentTailParams = {
           selections: fragmentSelections,
@@ -98,7 +127,13 @@ export function buildCypherSelection({
           ...fragmentTailParams
         });
         return result;
-      }, initial || ['']);
+      }, nonFragmentCypherSelection);
+
+    selection[0] = `${getTypenameMapElement(variableName, resolveInfo)}, ${
+      selection[0]
+    }`;
+
+    return selection;
   }
 
   const fieldName = headSelection.name.value;
@@ -198,10 +233,9 @@ export function buildCypherSelection({
 
   const skipLimit = computeSkipLimit(headSelection, resolveInfo.variableValues);
 
-  const subSelections = extractSelections(
-    headSelection.selectionSet ? headSelection.selectionSet.selections : [],
-    resolveInfo.fragments
-  );
+  const subSelections = headSelection.selectionSet
+    ? headSelection.selectionSet.selections
+    : [];
 
   let subSelection = recurse({
     initial: '',
@@ -334,5 +368,6 @@ export function buildCypherSelection({
     // set subSelection to update field argument params
     subSelection = translation.subSelection;
   }
+
   return [selection[0], { ...selection[1], ...subSelection[1] }];
 }

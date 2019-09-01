@@ -202,19 +202,6 @@ const augmentResolvers = (augmentedTypeMap, resolvers, config) => {
   if (Object.keys(mutationResolvers).length > 0) {
     resolvers.Mutation = mutationResolvers;
   }
-  // must implement __resolveInfo for every Interface type
-  // we use "FRAGMENT_TYPE" key to identify the Interface implementation
-  // type at runtime, so grab this value
-  const interfaceTypes = Object.keys(augmentedTypeMap).filter(
-    e => augmentedTypeMap[e].kind === 'InterfaceTypeDefinition'
-  );
-  interfaceTypes.map(e => {
-    resolvers[e] = {};
-
-    resolvers[e]['__resolveType'] = (obj, context, info) => {
-      return obj['FRAGMENT_TYPE'];
-    };
-  });
 
   return resolvers;
 };

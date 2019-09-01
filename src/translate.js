@@ -46,7 +46,8 @@ import {
   isEnumType,
   isObjectType,
   isInputType,
-  isListType
+  isListType,
+  isAbstractType
 } from 'graphql';
 import { buildCypherSelection } from './selections';
 import _ from 'lodash';
@@ -95,9 +96,9 @@ export const customCypherField = ({
       schemaType,
       resolveInfo,
       cypherFieldParamsIndex
-    )}}, true) | ${nestedVariable} {${
-      fieldIsInterfaceType ? `FRAGMENT_TYPE: labels(${nestedVariable})[0],` : ''
-    }${subSelection[0]}}]${fieldIsList ? '' : ')'}${skipLimit} ${commaIfTail}`,
+    )}}, true) | ${nestedVariable} {${subSelection[0]}}]${
+      fieldIsList ? '' : ')'
+    }${skipLimit} ${commaIfTail}`,
     ...tailParams
   };
 };
@@ -197,13 +198,7 @@ export const relationFieldOnNodeType = ({
           : ''
       }${queryParams})${
         whereClauses.length > 0 ? ` WHERE ${whereClauses.join(' AND ')}` : ''
-      } | ${nestedVariable} {${
-        isInlineFragment
-          ? `FRAGMENT_TYPE: labels(${nestedVariable})[0]${
-              subSelection[0] ? `, ${subSelection[0]}` : ''
-            }`
-          : subSelection[0]
-      }}]${
+      } | ${nestedVariable} {${subSelection[0]}}]${
         orderByParam
           ? `, [${buildSortMultiArgs(orderByParam)}])${
               temporalOrdering
@@ -466,13 +461,9 @@ const directedNodeTypeFieldOnRelationType = ({
             whereClauses.length > 0
               ? `WHERE ${whereClauses.join(' AND ')} `
               : ''
-          }| ${relationshipVariableName} {${
-            isInlineFragment
-              ? `FRAGMENT_TYPE: labels(${nestedVariable})[0]${
-                  subSelection[0] ? `, ${subSelection[0]}` : ''
-                }`
-              : subSelection[0]
-          }}]${!isArrayType(fieldType) ? ')' : ''}${skipLimit} ${commaIfTail}`,
+          }| ${relationshipVariableName} {${subSelection[0]}}]${
+            !isArrayType(fieldType) ? ')' : ''
+          }${skipLimit} ${commaIfTail}`,
           ...tailParams
         },
         subSelection
@@ -524,13 +515,9 @@ const directedNodeTypeFieldOnRelationType = ({
                 )
               ])
             : ''
-        }${queryParams}) | ${nestedVariable} {${
-          isInlineFragment
-            ? `FRAGMENT_TYPE: labels(${nestedVariable})[0]${
-                subSelection[0] ? `, ${subSelection[0]}` : ''
-              }`
-            : subSelection[0]
-        }}]${!isArrayType(fieldType) ? ')' : ''}${skipLimit} ${commaIfTail}`,
+        }${queryParams}) | ${nestedVariable} {${subSelection[0]}}]${
+          !isArrayType(fieldType) ? ')' : ''
+        }${skipLimit} ${commaIfTail}`,
         ...tailParams
       },
       subSelection
@@ -788,11 +775,7 @@ const customQuery = ({
     // Don't add subQuery for scalar type payloads
     // FIXME: fix subselection translation for temporal type payload
     !temporalType && !isScalarType
-      ? `{${
-          isInterfaceType
-            ? `FRAGMENT_TYPE: labels(${safeVariableName})[0],`
-            : ''
-        }${subQuery}} AS ${safeVariableName}${orderByClause}`
+      ? `{${subQuery}} AS ${safeVariableName}${orderByClause}`
       : ''
   }${outerSkipLimit}`;
   return [query, params];
@@ -1016,11 +999,7 @@ const customMutation = ({
     WITH apoc.map.values(value, [keys(value)[0]])[0] AS ${safeVariableName}
     RETURN ${safeVariableName} ${
     !temporalType && !isScalarType
-      ? `{${
-          isInterfaceType
-            ? `FRAGMENT_TYPE: labels(${safeVariableName})[0],`
-            : ''
-        }${subQuery}} AS ${safeVariableName}${orderByClause}${outerSkipLimit}`
+      ? `{${subQuery}} AS ${safeVariableName}${orderByClause}${outerSkipLimit}`
       : ''
   }`;
   return [query, params];
@@ -1037,8 +1016,24 @@ const nodeCreate = ({
   additionalLabels,
   params
 }) => {
+  const schema = resolveInfo.schema;
+  const typeMap = schema.getTypeMap();
+  const abstractTypeNames = Object.keys(typeMap).reduce((acc, typeName) => {
+    const maybeAbstractType = typeMap[typeName];
+    if (
+      isAbstractType(maybeAbstractType) &&
+      schema.isPossibleType(maybeAbstractType, schemaType)
+    ) {
+      acc.push(typeName);
+    }
+    return acc;
+  }, []);
   const safeVariableName = safeVar(variableName);
-  const safeLabelName = safeLabel([typeName, ...additionalLabels]);
+  const safeLabelName = safeLabel([
+    typeName,
+    ...abstractTypeNames,
+    ...additionalLabels
+  ]);
   let statements = [];
   const args = getMutationArguments(resolveInfo);
   statements = possiblySetFirstId({

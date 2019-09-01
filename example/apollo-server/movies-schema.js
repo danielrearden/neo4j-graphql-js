@@ -18,6 +18,7 @@ type Movie {
   mostSimilar: Movie @cypher(statement: "WITH {this} AS this RETURN this")
   degree: Int @cypher(statement: "WITH {this} AS this RETURN SIZE((this)--())")
   actors(first: Int = 3, offset: Int = 0): [Actor] @relation(name: "ACTED_IN", direction:"IN")
+  directors(first: Int = 3, offset: Int = 0): [Actor] @relation(name: "DIRECTED", direction:"IN")
   avgStars: Float
   filmedIn: State @relation(name: "FILMED_IN", direction: "OUT")
   scaleRating(scale: Int = 3): Float @cypher(statement: "WITH $this AS this RETURN $scale * this.imdbRating")
@@ -35,17 +36,24 @@ type State {
 }
 
 interface Person {
-	userId: ID!
   name: String
 }
 
-type Actor {
-  id: ID!
+union Searchable = Actor | Director | Movie
+
+type Actor implements Person {
   name: String
+  foo: String
   movies: [Movie] @relation(name: "ACTED_IN", direction: "OUT")
 }
 
-type User implements Person {
+type Director implements Person {
+  name: String
+  bar: String
+  movies: [Movie] @relation(name: "DIRECTED", direction: "OUT")
+}
+
+type User {
   userId: ID!
   name: String
   rated: [Rated]
@@ -78,6 +86,8 @@ type Query {
   MovieById(movieId: ID!): Movie
   GenresBySubstring(substring: String): [Genre] @cypher(statement: "MATCH (g:Genre) WHERE toLower(g.name) CONTAINS toLower($substring) RETURN g")
   Books: [Book]
+  AllPeople(first: Int = 10, offset: Int = 0): [Person]
+  Search(query: String!, first: Int = 10, offset: Int = 0): [Searchable] @cypher(statement: "MATCH (s:Searchable) WHERE toLower(s.name) CONTAINS toLower($query) OR toLower(s.title) CONTAINS toLower($query) RETURN s LIMIT $limit OFFSET $offset")
 }`;
 
 export const resolvers = {
@@ -99,6 +109,9 @@ export const resolvers = {
       return neo4jgraphql(object, params, ctx, resolveInfo, true);
     },
     Books(object, params, ctx, resolveInfo) {
+      return neo4jgraphql(object, params, ctx, resolveInfo, true);
+    },
+    AllPeople(object, params, ctx, resolveInfo) {
       return neo4jgraphql(object, params, ctx, resolveInfo, true);
     }
   }

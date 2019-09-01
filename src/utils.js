@@ -1,8 +1,10 @@
-import { print, parse } from 'graphql';
+import { print, parse, isObjectType } from 'graphql';
 import { possiblyAddDirectiveDeclarations } from './auth';
 import { v1 as neo4j } from 'neo4j-driver';
 import _ from 'lodash';
 import filter from 'lodash/filter';
+
+_.memoize.Cache = WeakMap;
 
 function parseArg(arg, variableValues) {
   switch (arg.value.kind) {
@@ -87,21 +89,6 @@ export const extractTypeMapFromTypeDefs = typeDefs => {
     return acc;
   }, {});
 };
-
-export function extractSelections(selections, fragments) {
-  // extract any fragment selection sets into a single array of selections
-  return selections.reduce((acc, cur) => {
-    if (cur.kind === 'FragmentSpread') {
-      const recursivelyExtractedSelections = extractSelections(
-        fragments[cur.name.value].selectionSet.selections,
-        fragments
-      );
-      return [...acc, ...recursivelyExtractedSelections];
-    } else {
-      return [...acc, cur];
-    }
-  }, []);
-}
 
 export function extractQueryResult({ records }, returnType) {
   const { variableName } = typeIdentifiers(returnType);
@@ -823,7 +810,7 @@ export const safeLabel = l => {
   if (!Array.isArray(l)) {
     l = [l];
   }
-  const safeLabels = l.map(label => {
+  const safeLabels = _.union(l).map(label => {
     const asStr = `${label}`;
     const escapeInner = asStr.replace(/\`/g, '\\`');
     return '`' + escapeInner + '`';
@@ -898,11 +885,7 @@ export const getPayloadSelections = resolveInfo => {
   );
   if (filteredFieldNodes[0] && filteredFieldNodes[0].selectionSet) {
     // FIXME: how to handle multiple fieldNode matches
-    const x = extractSelections(
-      filteredFieldNodes[0].selectionSet.selections,
-      resolveInfo.fragments
-    );
-    return x;
+    return filteredFieldNodes[0].selectionSet.selections;
   }
   return [];
 };
@@ -1184,4 +1167,28 @@ export const removeIgnoredFields = (schemaType, selections) => {
     });
   }
   return selections;
+};
+
+export const getConcreteTypeNames = _.memoize(schema =>
+  _.reduce(
+    schema.getTypeMap(),
+    (acc, type, typeName) => {
+      // Note: Heuristically any types that start with an underscore are either generated types or related to introspection.
+      // These types can be ignored in determining a list of possible concrete types to cut down statement size.
+      const operationTypes = ['Query', 'Mutation', 'Subscription'];
+      if (
+        !operationTypes.includes(typeName) &&
+        !typeName.startsWith('_') &&
+        isObjectType(type)
+      ) {
+        acc.push(typeName);
+      }
+      return acc;
+    },
+    []
+  )
+);
+
+export const getTypenameMapElement = (variable, resolveInfo) => {
+  return `__typename: head([x IN labels(${variable}) WHERE x IN $concreteTypeNames])`;
 };
